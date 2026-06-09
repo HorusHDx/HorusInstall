@@ -52,6 +52,13 @@ del %TEMP%\diskpart_resize.txt >nul 2>&1
 echo [*] Partition expanded >> %LOGFILE%
 
 :: ============================================================
+:: DISABLE AUTO LOGON (For Security)
+:: ============================================================
+echo [*] Disabling automatic logon...
+reg delete "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v AutoAdminLogon /f >nul 2>&1
+reg delete "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" /v DefaultPassword /f >nul 2>&1
+
+:: ============================================================
 :: CLEANUP (Safe Delayed Self-Deletion)
 :: ============================================================
 echo [*] Cleaning up HorusInstall temporary scripts...
