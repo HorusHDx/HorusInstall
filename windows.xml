@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    HorusInstall - Windows Server Unattended Answer File
+    Supports: Windows Server 2016 / 2019 / 2022 Datacenter
+    https://github.com/HorusHDx/HorusInstall
+-->
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+
+    <!-- ============================================================
+         PHASE 1: Windows PE (Setup environment)
+         ============================================================ -->
+    <settings pass="windowsPE">
+
+        <!-- Setup UI language -->
+        <component name="Microsoft-Windows-International-Core-WinPE"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35"
+                   language="neutral"
+                   versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <SetupUILanguage>
+                <UILanguage>en-US</UILanguage>
+            </SetupUILanguage>
+            <InputLocale>en-US</InputLocale>
+            <SystemLocale>en-US</SystemLocale>
+            <UILanguage>en-US</UILanguage>
+            <UILanguageFallback>en-US</UILanguageFallback>
+            <UserLocale>en-US</UserLocale>
+        </component>
+
+        <!-- Disk configuration -->
+        <component name="Microsoft-Windows-Setup"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35"
+                   language="neutral"
+                   versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+            <!-- Accept EULA automatically -->
+            <AcceptEula>true</AcceptEula>
+
+            <!-- Select the image to install -->
+            <ImageInstall>
+                <OSImage>
+                    <InstallFrom>
+                        <MetaData wcm:action="add">
+                            <Key>/IMAGE/NAME</Key>
+                            <Value>__IMAGE_NAME__</Value>
+                        </MetaData>
+                    </InstallFrom>
+                    <InstallTo>
+                        <DiskID>0</DiskID>
+                        <PartitionID>__WIN_PARTITION_ID__</PartitionID>
+                    </InstallTo>
+                    <WillShowUI>OnError</WillShowUI>
+                </OSImage>
+            </ImageInstall>
+
+            <!-- Disk partitioning - handled by trans.sh, use existing layout -->
+            <DiskConfiguration>
+                <WillShowUI>OnError</WillShowUI>
+                <Disk wcm:action="add">
+                    <DiskID>0</DiskID>
+                    <WillWipeDisk>false</WillWipeDisk>
+                </Disk>
+            </DiskConfiguration>
+
+            <!-- Skip product key — evaluation ISOs don't need one -->
+            <!-- ProductKey removed intentionally for evaluation ISOs -->
+
+            <!-- User data -->
+            <UserData>
+                <AcceptEula>true</AcceptEula>
+                <FullName>Administrator</FullName>
+                <Organization>HorusInstall</Organization>
+            </UserData>
+
+        </component>
+    </settings>
+
+    <!-- ============================================================
+         PHASE 2: Specialize (first boot, hardware detection)
+         ============================================================ -->
+    <settings pass="specialize">
+
+        <component name="Microsoft-Windows-Shell-Setup"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35"
+                   language="neutral"
+                   versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <ComputerName>WIN-SERVER</ComputerName>
+            <TimeZone>UTC</TimeZone>
+        </component>
+
+        <!-- Disable Windows Defender real-time during setup -->
+        <component name="Microsoft-Windows-Security-SPP-UX"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35"
+                   language="neutral"
+                   versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <SkipAutoActivation>true</SkipAutoActivation>
+        </component>
+
+        <!-- Network — static IP will be set via SetupComplete.cmd if needed -->
+        <component name="Microsoft-Windows-TCPIP"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35"
+                   language="neutral"
+                   versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <Interfaces>
+                <Interface wcm:action="add">
+                    <Identifier>Local Area Connection</Identifier>
+                    <Ipv4Settings>
+                        <DhcpEnabled>true</DhcpEnabled>
+                    </Ipv4Settings>
+                </Interface>
+            </Interfaces>
+        </component>
+
+    </settings>
+
+    <!-- ============================================================
+         PHASE 3: OOBE (Out-of-box experience / first login setup)
+         ============================================================ -->
+    <settings pass="oobeSystem">
+
+        <component name="Microsoft-Windows-Shell-Setup"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35"
+                   language="neutral"
+                   versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+            <!-- Skip all OOBE screens -->
+            <OOBE>
+                <HideEULAPage>true</HideEULAPage>
+                <HideLocalAccountScreen>true</HideLocalAccountScreen>
+                <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+                <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+                <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+                <NetworkLocation>Work</NetworkLocation>
+                <ProtectYourPC>3</ProtectYourPC>
+                <SkipMachineOOBE>true</SkipMachineOOBE>
+                <SkipUserOOBE>true</SkipUserOOBE>
+            </OOBE>
+
+            <!-- Set timezone -->
+            <TimeZone>UTC</TimeZone>
+
+            <!-- Administrator account -->
+            <UserAccounts>
+                <AdministratorPassword>
+                    <Value>__WIN_PASSWORD__</Value>
+                    <PlainText>true</PlainText>
+                </AdministratorPassword>
+                <LocalAccounts>
+                    <LocalAccount wcm:action="add">
+                        <Password>
+                            <Value>__WIN_PASSWORD__</Value>
+                            <PlainText>true</PlainText>
+                        </Password>
+                        <Description>Administrator</Description>
+                        <DisplayName>__WIN_USERNAME__</DisplayName>
+                        <Group>Administrators</Group>
+                        <Name>__WIN_USERNAME__</Name>
+                    </LocalAccount>
+                </LocalAccounts>
+            </UserAccounts>
+
+            <!-- Auto-login for first setup -->
+            <AutoLogon>
+                <Password>
+                    <Value>__WIN_PASSWORD__</Value>
+                    <PlainText>true</PlainText>
+                </Password>
+                <Enabled>true</Enabled>
+                <LogonCount>1</LogonCount>
+                <Username>__WIN_USERNAME__</Username>
+            </AutoLogon>
+
+            <!-- Run setup script on first logon -->
+            <FirstLogonCommands>
+                <SynchronousCommand wcm:action="add">
+                    <CommandLine>cmd /c "C:\Windows\Setup\Scripts\windows-setup.bat"</CommandLine>
+                    <Description>HorusInstall post-setup</Description>
+                    <Order>1</Order>
+                    <RequiresUserInput>false</RequiresUserInput>
+                </SynchronousCommand>
+            </FirstLogonCommands>
+
+        </component>
+
+        <!-- International settings -->
+        <component name="Microsoft-Windows-International-Core"
+                   processorArchitecture="amd64"
+                   publicKeyToken="31bf3856ad364e35"
+                   language="neutral"
+                   versionScope="nonSxS"
+                   xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <InputLocale>en-US</InputLocale>
+            <SystemLocale>en-US</SystemLocale>
+            <UILanguage>en-US</UILanguage>
+            <UILanguageFallback>en-US</UILanguageFallback>
+            <UserLocale>en-US</UserLocale>
+        </component>
+
+    </settings>
+
+</unattend>
