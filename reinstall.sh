@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # HorusInstall - Linux to Windows Server installer
 # https://github.com/HorusHDx/HorusInstall
-# Fixed for Contabo Network Infrastructure
 
 set -eE
 
@@ -22,13 +21,6 @@ cat <<EOF
 HorusInstall - Reinstall Linux VPS to Windows Server
 Usage:
   bash reinstall.sh windows --version VERSION [OPTIONS]
-
-Options:
-  --password PASSWORD   Administrator password (default: HorusInstall123!)
-  --username USERNAME   Administrator username (default: Administrator)
-  --port PORT           RDP Port (default: 3389)
-  --iso URL             Custom Windows ISO URL
-  --image NAME          Specific WIM Image name
 EOF
 exit 1
 }
@@ -82,28 +74,21 @@ ALPINE_MODLOOP="$ALPINE_MIRROR/$ALPINE_BRANCH/releases/$ALPINE_ARCH/netboot/modl
 
 get_net_info() {
     info "Gathering network settings"
-    
-    # Detectar interfaz activa principal
     NET_IFACE=$(ip route show | awk '/default/ {print $5; exit}')
     [ -z "$NET_IFACE" ] && NET_IFACE=$(ip -4 route show | awk '{print $5; exit}')
     [ -z "$NET_IFACE" ] && die "Could not detect active network interface."
 
-    # Detectar IP y Prefijo CIDR
     local ip_cidr=$(ip -4 addr show dev "$NET_IFACE" | awk '/inet / {print $2; exit}')
     [ -z "$ip_cidr" ] && die "Could not detect local IP address."
     NET_IPV4=${ip_cidr%/*}
     NET_PREFIX=${ip_cidr#*/}
 
-    # FIX CONTABO: Extracción robusta de Gateway
     NET_GATEWAY=$(ip route show default dev "$NET_IFACE" | awk '/via/ {print $3; exit}')
     [ -z "$NET_GATEWAY" ] && NET_GATEWAY=$(ip route show | awk '/default/ {print $3; exit}')
     [ -z "$NET_GATEWAY" ] && NET_GATEWAY=$(ip route | grep "$NET_IFACE" | awk '/scope link/ {print $1}' | head -n 1)
-    
-    # Si todo lo anterior falla, buscar la IP del host de la ruta
     [ -z "$NET_GATEWAY" ] && NET_GATEWAY=$(ip route show proto kernel | awk '{print $1}' | cut -d '/' -f1 | sed 's/\.[0-9]*$/\.1/')
     [ -z "$NET_GATEWAY" ] && die "Network gateway could not be found."
 
-    # Detectar DNS externo
     NET_DNS=$(awk '/nameserver/ {print $2; exit}' /etc/resolv.conf)
     [ -z "$NET_DNS" ] || echo "$NET_DNS" | grep -qE "127.0.0" && NET_DNS="8.8.8.8"
 
@@ -183,13 +168,19 @@ EOF
 
 setup_grub() {
     info "Configuring GRUB"
-    local cmdline="alpine_repo=$ALPINE_MIRROR/$ALPINE_BRANCH/main modloop=/horusinstall-tmp/alpine-modloop alpine_commands=local:default horusinstall=1 console=tty0 console=ttyS0,1115200"
+    
+    # Detectar el prefijo correcto de boot
+    local boot_prefix="/boot"
+    if mountpoint -q /boot; then boot_prefix=""; fi
+
+    local cmdline="alpine_repo=$ALPINE_MIRROR/$ALPINE_BRANCH/main modloop=${boot_prefix}/horusinstall/modloop alpine_commands=local:default horusinstall=1 console=tty0 console=ttyS0,1115200"
     
     mkdir -p /boot/horusinstall
     cp "$TMP/alpine-vmlinuz"    /boot/horusinstall/vmlinuz
     cp "$TMP/alpine-initrd.img" /boot/horusinstall/initrd.img
     cp "$TMP/alpine-modloop"    /boot/horusinstall/modloop
 
+    # Crear la entrada personalizada clásica en el 40_custom
     cat <<EOF > /etc/grub.d/40_custom
 #!/bin/sh
 exec tail -n +3 \$0
@@ -199,14 +190,21 @@ menuentry "HorusInstall (Automated System Reinstallation)" --class windows {
     insmod ext2
     set root='$(grub-probe --target=compatibility_hint /boot/horusinstall/vmlinuz || echo "hd0,msdos1")'
     search --no-floppy --fs-uuid --set=root $(grub-probe --target=fs_uuid /boot/horusinstall/vmlinuz)
-    linux /boot/horusinstall/vmlinuz $cmdline
-    initrd /boot/horusinstall/initrd.img
+    linux ${boot_prefix}/horusinstall/vmlinuz $cmdline
+    initrd ${boot_prefix}/horusinstall/initrd.img
 }
 EOF
 
-    if command -v update-grub >/dev/null 2>&1; then update-grub; else grub2-mkconfig -o /boot/grub2/grub.cfg; fi
+    # FIX CONTABO: Modificar las variables por defecto globales del sistema para evitar saltos
     sed -i 's/GRUB_DEFAULT=.*/GRUB_DEFAULT="HorusInstall (Automated System Reinstallation)"/' /etc/default/grub || true
-    if command -v update-grub >/dev/null 2>&1; then update-grub; else grub2-mkconfig -o /boot/grub2/grub.cfg; fi
+    sed -i 's/GRUB_TIMEOUT=.*/GRUB_TIMEOUT=10/' /etc/default/grub || true
+    sed -i 's/GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=menu/' /etc/default/grub || true
+
+    # Forzar la actualización en todas las rutas posibles que usa Contabo (BIOS y UEFI)
+    if command -v update-grub >/dev/null 2>&1; then update-grub; fi
+    if [ -f /boot/grub/grub.cfg ]; then grub-mkconfig -o /boot/grub/grub.cfg; fi
+    if [ -f /boot/efi/EFI/ubuntu/grub.cfg ]; then grub-mkconfig -o /boot/efi/EFI/ubuntu/grub.cfg; fi
+    if [ -f /boot/grub2/grub.cfg ]; then grub2-mkconfig -o /boot/grub2/grub.cfg; fi
 }
 
 main() {
