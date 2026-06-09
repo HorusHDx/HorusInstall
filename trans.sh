@@ -1,6 +1,6 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 # HorusInstall - trans.sh
-# Runs inside Alpine Linux (in RAM) as the intermediate environment
+# Corre dentro de Alpine Linux (en RAM) como entorno intermedio
 set -eE
 export LC_ALL=C
 TMP=/horusinstall-tmp
@@ -113,9 +113,9 @@ extract_and_deploy() {
 
     local setup_dir="$WIN_MOUNT/Windows/Setup/Scripts"
     mkdir -p "$setup_dir"
-    cp "$TMP/windows.xml"                  "$WIN_MOUNT/autounattend.xml"
-    cp "$TMP/windows-setup-bat.txt"        "$setup_dir/windows-setup.bat"
-    cp "$TMP/windows-set-netconf -bat.txt" "$setup_dir/windows-set-netconf.bat"
+    cp "$TMP/windows.xml"              "$WIN_MOUNT/autounattend.xml"
+    cp "$TMP/windows-setup.bat"        "$setup_dir/windows-setup.bat"
+    cp "$TMP/windows-set-netconf.bat"  "$setup_dir/windows-set-netconf.bat"
 
     sed -i "s/__WIN_PASSWORD__/$WIN_PASSWORD/g" "$WIN_MOUNT/autounattend.xml"
     sed -i "s/__WIN_USERNAME__/$WIN_USERNAME/g" "$WIN_MOUNT/autounattend.xml"
@@ -153,7 +153,6 @@ cleanup_and_reboot() {
 }
 
 main() {
-    exec > >(tee -a "$LOGFILE") 2>&1
     load_config; setup_alpine; detect_disk; detect_boot_mode; detect_drivers
     download_iso; download_virtio; prepare_disk; extract_and_deploy; cleanup_and_reboot
 }

@@ -129,8 +129,11 @@ inject_into_initrd() {
     rm -rf "$initrd_dir" && mkdir -p "$initrd_dir"
 
     mkdir -p "$initrd_dir/etc/local.d" "$initrd_dir$TMP" "$initrd_dir/etc/network"
-    cp "$TMP/horus-config" "$initrd_dir$TMP/horus-config"
-    cp "$TMP/trans.sh" "$initrd_dir$TMP/trans.sh"
+    cp "$TMP/horus-config"             "$initrd_dir$TMP/horus-config"
+    cp "$TMP/trans.sh"                 "$initrd_dir$TMP/trans.sh"
+    cp "$TMP/windows.xml"             "$initrd_dir$TMP/windows.xml"
+    cp "$TMP/windows-setup.bat"       "$initrd_dir$TMP/windows-setup.bat"
+    cp "$TMP/windows-set-netconf.bat" "$initrd_dir$TMP/windows-set-netconf.bat"
 
     {
         echo "auto lo"
@@ -211,10 +214,13 @@ main() {
     get_net_info
     mkdir -p "$TMP"
     info "Downloading Alpine elements"
-    curl_download "$ALPINE_KERNEL"  "$TMP/alpine-vmlinuz"
-    curl_download "$ALPINE_INITRD"  "$TMP/alpine-initrd.img"
-    curl_download "$ALPINE_MODLOOP" "$TMP/alpine-modloop"
-    curl_download "$CONFHOME/trans.sh" "$TMP/trans.sh"
+    curl_download "$ALPINE_KERNEL"                    "$TMP/alpine-vmlinuz"
+    curl_download "$ALPINE_INITRD"                    "$TMP/alpine-initrd.img"
+    curl_download "$ALPINE_MODLOOP"                   "$TMP/alpine-modloop"
+    curl_download "$CONFHOME/trans.sh"                "$TMP/trans.sh"
+    curl_download "$CONFHOME/windows.xml"             "$TMP/windows.xml"
+    curl_download "$CONFHOME/windows-setup.bat"       "$TMP/windows-setup.bat"
+    curl_download "$CONFHOME/windows-set-netconf.bat" "$TMP/windows-set-netconf.bat"
     chmod +x "$TMP/trans.sh"
     write_config
     inject_into_initrd
