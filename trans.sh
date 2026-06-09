@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# HorusInstall - trans.sh (FIXED FOR HARDWARE COMPATIBILITY)
+# HorusInstall - trans.sh
 # Runs inside Alpine Linux (in RAM) as the intermediate environment
 set -eE
 export LC_ALL=C
@@ -23,9 +23,16 @@ load_config() {
 
 setup_alpine() {
     info "Updating Alpine repositories"
+    
+    # Re-inyectar ruta por defecto si Alpine la pierde en el arranque inicial
+    if ! ip route show | grep -q default; then
+        ip route add default via "$NET_GATEWAY" dev "$NET_IFACE" 2>/dev/null || true
+    fi
+
     local attempts=0
     while ! ping -c 1 -w 3 8.8.8.8 >/dev/null 2>&1; do
         warn "Waiting for network connection..."
+        ip route add default via "$NET_GATEWAY" dev "$NET_IFACE" 2>/dev/null || true
         sleep 2
         attempts=$((attempts + 1))
         [ "$attempts" -gt 15 ] && die "Network timeout inside Alpine."
@@ -125,18 +132,15 @@ extract_and_deploy() {
         local virtio_mount="/mnt/virtio"; mkdir -p "$virtio_mount"; mount -o loop "$TMP/virtio-win.iso" "$virtio_mount"
         local drv_ver="2k22"; [ "$WINDOWS_VERSION" = "2016" ] && drv_ver="2k16"; [ "$WINDOWS_VERSION" = "2019" ] && drv_ver="2k19"
         
-        # Copiar Drivers a la raíz para la fase desatendida y Windows PE
         mkdir -p "$WIN_MOUNT/Drivers/VirtIO"
         cp -r "$virtio_mount/NetKVM/$drv_ver/amd64/"* "$WIN_MOUNT/Drivers/VirtIO/" 2>/dev/null || true
         cp -r "$virtio_mount/viostor/$drv_ver/amd64/"* "$WIN_MOUNT/Drivers/VirtIO/" 2>/dev/null || true
         cp -r "$virtio_mount/vioscsi/$drv_ver/amd64/"* "$WIN_MOUNT/Drivers/VirtIO/" 2>/dev/null || true
         
-        # Copiar también a la ruta de DriverStore para inyección profunda nativa de Windows
         mkdir -p "$WIN_MOUNT/Windows/INF/VirtIO"
         cp -r "$WIN_MOUNT/Drivers/VirtIO/"* "$WIN_MOUNT/Windows/INF/VirtIO/"
         
         umount "$virtio_mount"
-        info "VirtIO files provisioned successfully."
     fi
 }
 

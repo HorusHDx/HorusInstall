@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # HorusInstall - Linux to Windows Server installer
 # https://github.com/HorusHDx/HorusInstall
-# Based on concepts from bin456789/reinstall (GPL-3.0)
+# Fixed for Contabo Network Infrastructure
 
 set -eE
 
@@ -82,15 +82,30 @@ ALPINE_MODLOOP="$ALPINE_MIRROR/$ALPINE_BRANCH/releases/$ALPINE_ARCH/netboot/modl
 
 get_net_info() {
     info "Gathering network settings"
-    NET_IFACE=$(ip route show default | awk '/default/ {print $5; exit}')
-    [ -z "$NET_IFACE" ] && die "Could not detect default network interface."
+    
+    # Detectar interfaz activa principal
+    NET_IFACE=$(ip route show | awk '/default/ {print $5; exit}')
+    [ -z "$NET_IFACE" ] && NET_IFACE=$(ip -4 route show | awk '{print $5; exit}')
+    [ -z "$NET_IFACE" ] && die "Could not detect active network interface."
 
+    # Detectar IP y Prefijo CIDR
     local ip_cidr=$(ip -4 addr show dev "$NET_IFACE" | awk '/inet / {print $2; exit}')
+    [ -z "$ip_cidr" ] && die "Could not detect local IP address."
     NET_IPV4=${ip_cidr%/*}
     NET_PREFIX=${ip_cidr#*/}
-    NET_GATEWAY=$(ip route show default | awk '/default/ {print $3; exit}')
+
+    # FIX CONTABO: Extracción robusta de Gateway
+    NET_GATEWAY=$(ip route show default dev "$NET_IFACE" | awk '/via/ {print $3; exit}')
+    [ -z "$NET_GATEWAY" ] && NET_GATEWAY=$(ip route show | awk '/default/ {print $3; exit}')
+    [ -z "$NET_GATEWAY" ] && NET_GATEWAY=$(ip route | grep "$NET_IFACE" | awk '/scope link/ {print $1}' | head -n 1)
+    
+    # Si todo lo anterior falla, buscar la IP del host de la ruta
+    [ -z "$NET_GATEWAY" ] && NET_GATEWAY=$(ip route show proto kernel | awk '{print $1}' | cut -d '/' -f1 | sed 's/\.[0-9]*$/\.1/')
+    [ -z "$NET_GATEWAY" ] && die "Network gateway could not be found."
+
+    # Detectar DNS externo
     NET_DNS=$(awk '/nameserver/ {print $2; exit}' /etc/resolv.conf)
-    [ -z "$NET_DNS" ] && NET_DNS="8.8.8.8"
+    [ -z "$NET_DNS" ] || echo "$NET_DNS" | grep -qE "127.0.0" && NET_DNS="8.8.8.8"
 
     NET_MODE="dhcp"
     if [ -f /etc/network/interfaces ] && grep -q "static" /etc/network/interfaces; then
@@ -100,7 +115,6 @@ get_net_info() {
     elif [ -d /etc/netplan ] && grep -q "dhcp4: no" /etc/netplan/*.yaml 2>/dev/null; then
         NET_MODE="static"
     fi
-    [ -z "$NET_GATEWAY" ] && die "Network gateway could not be found."
 }
 
 curl_download() {
@@ -185,8 +199,8 @@ menuentry "HorusInstall (Automated System Reinstallation)" --class windows {
     insmod ext2
     set root='$(grub-probe --target=compatibility_hint /boot/horusinstall/vmlinuz || echo "hd0,msdos1")'
     search --no-floppy --fs-uuid --set=root $(grub-probe --target=fs_uuid /boot/horusinstall/vmlinuz)
-    linux /horusinstall/vmlinuz $cmdline
-    initrd /horusinstall/initrd.img
+    linux /boot/horusinstall/vmlinuz $cmdline
+    initrd /boot/horusinstall/initrd.img
 }
 EOF
 
