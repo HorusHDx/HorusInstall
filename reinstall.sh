@@ -251,17 +251,21 @@ get_boot_disk() {
 setup_bootloader() {
     local kernel_url=$1
     local initrd_url=$2
+    local modloop_url=$3
 
     info "Setting up bootloader for Alpine intermediate environment"
 
     mkdir -p "$TMP"
 
-    # Download Alpine kernel and initrd
+    # Download Alpine kernel, initrd, and modloop
     info "Downloading Alpine Linux kernel..."
     curl_download "$kernel_url" "$TMP/alpine-vmlinuz"
 
     info "Downloading Alpine Linux initrd..."
     curl_download "$initrd_url" "$TMP/alpine-initrd.img"
+
+    info "Downloading Alpine Linux modloop (kernel modules)..."
+    curl_download "$modloop_url" "$TMP/alpine-modloop"
 
     # Download our trans.sh
     info "Downloading trans.sh..."
@@ -309,8 +313,11 @@ setup_grub_bios() {
     # Backup original grub.cfg
     cp "$grub_cfg" "${grub_cfg}.horus-backup"
 
-    # Build kernel cmdline
+    # Alpine netboot cmdline — modloop is REQUIRED or "Mounting boot media: failed"
     local cmdline="console=tty0 console=ttyS0,115200n8"
+    cmdline="$cmdline modloop=/horusinstall-tmp/alpine-modloop"
+    cmdline="$cmdline modloop_sign_skip=1"
+    cmdline="$cmdline alpine_repo=https://dl-cdn.alpinelinux.org/alpine/v3.21/main"
     cmdline="$cmdline horusinstall=1"
 
     # Prepend our entry so it boots first
@@ -346,7 +353,11 @@ setup_grub_efi() {
 
     cp "$grub_cfg" "${grub_cfg}.horus-backup"
 
-    local cmdline="console=tty0 console=ttyS0,115200n8 horusinstall=1"
+    local cmdline="console=tty0 console=ttyS0,115200n8"
+    cmdline="$cmdline modloop=/horusinstall-tmp/alpine-modloop"
+    cmdline="$cmdline modloop_sign_skip=1"
+    cmdline="$cmdline alpine_repo=https://dl-cdn.alpinelinux.org/alpine/v3.21/main"
+    cmdline="$cmdline horusinstall=1"
 
     cat > "$TMP/grub-entry.txt" <<GRUBENTRY
 ### BEGIN HorusInstall ###
@@ -372,8 +383,10 @@ GRUBENTRY
 # ============================================================
 get_alpine_urls() {
     # Alpine 3.21 stable — x86_64 netboot
-    ALPINE_KERNEL="https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/x86_64/netboot/vmlinuz-lts"
-    ALPINE_INITRD="https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/x86_64/netboot/initramfs-lts"
+    ALPINE_BASE="https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/x86_64/netboot"
+    ALPINE_KERNEL="$ALPINE_BASE/vmlinuz-lts"
+    ALPINE_INITRD="$ALPINE_BASE/initramfs-lts"
+    ALPINE_MODLOOP="$ALPINE_BASE/modloop-lts"
 }
 
 # ============================================================
@@ -458,7 +471,7 @@ main() {
     echo "  Boot mode       : $(is_efi && echo EFI || echo BIOS)" >&2
     echo "" >&2
 
-    setup_bootloader "$ALPINE_KERNEL" "$ALPINE_INITRD"
+    setup_bootloader "$ALPINE_KERNEL" "$ALPINE_INITRD" "$ALPINE_MODLOOP"
 
     info "Setup complete — rebooting in 10 seconds"
     echo "" >&2
