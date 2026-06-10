@@ -1,0 +1,375 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  windows.xml
+  HorusInstall - Linux to Windows reinstall tool
+  Based on: github.com/bin456789/reinstall (GPL-3.0)
+  Modified by: HorusHDx
+
+  This is the Windows unattended answer file (autounattend.xml / unattend.xml).
+  Placeholders wrapped in % are replaced at runtime by reinstall.sh before
+  the Windows installer boots.
+
+  Placeholder reference:
+    %arch%                  : Processor architecture  (amd64 | arm64 | x86)
+    %key%                   : Windows product key (or empty for evaluation/KMS)
+    %image_name%            : Windows edition to install (e.g. "Windows 11 Pro")
+    %disk_id%               : Target disk number (0-based, detected by get-xda.sh)
+    %installto_partitionid% : Target partition number for Windows (usually 3 for GPT)
+    %locale%                : Language/locale code (e.g. en-us, es-es, pt-br)
+    %enable_administrator%  : 1 = enable built-in Administrator account, 0 = skip
+    %use_default_rdp_port%  : true = enable RDP firewall rule on port 3389
+    %administrator_password%: Base64-encoded password for the built-in Administrator
+    %user_username%         : Username for the new local account
+    %user_password%         : Base64-encoded password for the new local account
+-->
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+
+  <!-- =========================================================
+       PASS: windowsPE
+       Runs inside the Windows PE environment before installation.
+       Handles: disk selection, image selection, locale, product key.
+       ========================================================= -->
+  <settings pass="windowsPE">
+
+    <component
+      name="Microsoft-Windows-Setup"
+      processorArchitecture="%arch%"
+      publicKeyToken="31bf3856ad364e35"
+      language="neutral"
+      versionScope="nonSxS"
+      xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+      <!-- Disable firewall during PE phase to reduce memory usage.
+           NOTE: Remove this element entirely when installing Vista,
+           as it causes an error on that version. -->
+      <EnableFirewall>false</EnableFirewall>
+
+      <UserData>
+        <AcceptEula>true</AcceptEula>
+        <ProductKey>
+          <!-- Leave empty for evaluation ISOs or KMS-activated environments.
+               For retail/volume keys, reinstall.sh injects the key here. -->
+          <Key>%key%</Key>
+        </ProductKey>
+      </UserData>
+
+      <ImageInstall>
+        <OSImage>
+          <InstallFrom>
+            <!-- Select the Windows edition by name (case-insensitive match).
+                 Example values:
+                   Windows 11 Pro
+                   Windows 11 Enterprise LTSC 2024
+                   Windows Server 2025 SERVERDATACENTER -->
+            <MetaData wcm:action="add">
+              <Key>/IMAGE/NAME</Key>
+              <Value>%image_name%</Value>
+            </MetaData>
+          </InstallFrom>
+          <InstallTo>
+            <!-- Disk and partition are detected and injected by reinstall.sh -->
+            <DiskID>%disk_id%</DiskID>
+            <PartitionID>%installto_partitionid%</PartitionID>
+          </InstallTo>
+        </OSImage>
+      </ImageInstall>
+
+      <!-- Hardware requirement bypass for Windows 11 (TPM, SecureBoot, RAM).
+           CPU core count cannot be bypassed via registry.
+           References:
+             https://github.com/pbatard/rufus/issues/1990
+             https://learn.microsoft.com/windows/iot/iot-enterprise/Hardware/System_Requirements
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>cmd /c for %a in (RAM TPM SecureBoot) do reg add HKLM\SYSTEM\Setup\LabConfig /t REG_DWORD /v Bypass%aCheck /d 1 /f</Path>
+        </RunSynchronousCommand>
+      </RunSynchronous>
+      -->
+
+    </component>
+
+    <!-- Locale and keyboard settings applied during PE phase -->
+    <component
+      name="Microsoft-Windows-International-Core-WinPE"
+      processorArchitecture="%arch%"
+      publicKeyToken="31bf3856ad364e35"
+      language="neutral"
+      versionScope="nonSxS"
+      xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+      <InputLocale>%locale%</InputLocale>
+      <SystemLocale>%locale%</SystemLocale>
+      <UILanguage>%locale%</UILanguage>
+      <UserLocale>%locale%</UserLocale>
+    </component>
+
+  </settings>
+
+  <!-- =========================================================
+       PASS: offlineServicing
+       Runs against the offline Windows image before first boot.
+       Used here to inject drivers from the staging directories.
+
+       NOTE: Driver injection is done here (offlineServicing /
+       PnpCustomizationsNonWinPE) instead of windowsPE /
+       PnpCustomizationsWinPE to avoid a known error on
+       Windows 8/8.1/Server 2012/2012 R2 (Vultr and similar
+       providers) where loading balloon drivers during WinPE
+       causes: "Windows Cannot find Microsoft software license terms"
+       ========================================================= -->
+  <settings pass="offlineServicing">
+
+    <component
+      name="Microsoft-Windows-PnpCustomizationsNonWinPE"
+      processorArchitecture="%arch%"
+      publicKeyToken="31bf3856ad364e35"
+      language="neutral"
+      versionScope="nonSxS"
+      xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+      <DriverPaths>
+        <!-- Empty directories do not cause errors.
+             Drivers can be placed in subdirectories.
+             X:\ is the WinPE RAM drive where reinstall.sh copies drivers. -->
+
+        <!-- Auto-detected platform drivers (VirtIO, AWS, GCP, Azure, Intel) -->
+        <PathAndCredentials wcm:action="add" wcm:keyValue="1">
+          <Path>X:\drivers</Path>
+        </PathAndCredentials>
+
+        <!-- User-supplied drivers via --add-driver flag -->
+        <PathAndCredentials wcm:action="add" wcm:keyValue="2">
+          <Path>X:\custom_drivers</Path>
+        </PathAndCredentials>
+      </DriverPaths>
+
+    </component>
+
+  </settings>
+
+  <!-- =========================================================
+       PASS: specialize
+       Runs after the OS files are copied to disk, before OOBE.
+       Used for: power settings, RDP, account setup, telemetry off.
+       ========================================================= -->
+  <settings pass="specialize">
+
+    <component
+      name="Microsoft-Windows-Deployment"
+      processorArchitecture="%arch%"
+      publicKeyToken="31bf3856ad364e35"
+      language="neutral"
+      versionScope="nonSxS"
+      xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+      <RunSynchronous>
+
+        <!-- Set "never turn off display" on all power schemes.
+             Required by major cloud providers (Azure, AWS, Huawei).
+             References:
+               https://learn.microsoft.com/en-us/azure/virtual-machines/windows/prepare-for-upload-vhd-image
+               https://docs.aws.amazon.com/AWSEC2/latest/WindowsGuide/migrating-latest-types.html
+             powercfg /aliases shows GUID-to-name mappings. Works on Vista+. -->
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>powercfg /setacvalueindex SCHEME_BALANCED SUB_VIDEO VIDEOIDLE 0</Path>
+        </RunSynchronousCommand>
+
+        <RunSynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Path>powercfg /setacvalueindex SCHEME_MIN SUB_VIDEO VIDEOIDLE 0</Path>
+        </RunSynchronousCommand>
+
+        <RunSynchronousCommand wcm:action="add">
+          <Order>3</Order>
+          <Path>powercfg /setacvalueindex SCHEME_MAX SUB_VIDEO VIDEOIDLE 0</Path>
+        </RunSynchronousCommand>
+
+        <!-- Set active power plan to High Performance (SCHEME_MIN) -->
+        <RunSynchronousCommand wcm:action="add">
+          <Order>4</Order>
+          <Path>powercfg /setactive SCHEME_MIN</Path>
+        </RunSynchronousCommand>
+
+        <!-- Enable built-in Administrator account when requested.
+             Uses a loop over localized names so it works on any language ISO.
+             %enable_administrator% is replaced with "1" or "0" by reinstall.sh.
+             Notes:
+               - Vista has no PowerShell built-in.
+               - Windows 7 cannot use "wmic useraccount" at this pass.
+             Reference:
+               https://learn.microsoft.com/archive/technet-wiki/13813.localized-names-for-administrator-account-in-windows -->
+        <RunSynchronousCommand wcm:action="add">
+          <Order>5</Order>
+          <Path>cmd /c "if "%enable_administrator%"=="1" for %a in (Administrator Administrador Administrateur Administratör Администратор Järjestelmänvalvoja Rendszergazda) do (net user %a /active:yes &amp;&amp; exit)"</Path>
+        </RunSynchronousCommand>
+
+        <!-- Disable Reserved Storage (the ~7 GB Microsoft holds back for updates).
+             Registry method works at specialize pass; DISM/PowerShell methods
+             do not take effect at this stage. -->
+        <RunSynchronousCommand wcm:action="add">
+          <Order>6</Order>
+          <Path>reg add HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager /v ShippedWithReserves /t REG_DWORD /d 0 /f</Path>
+        </RunSynchronousCommand>
+
+      </RunSynchronous>
+    </component>
+
+    <!-- Allow Remote Desktop connections -->
+    <component
+      name="Microsoft-Windows-TerminalServices-LocalSessionManager"
+      processorArchitecture="%arch%"
+      publicKeyToken="31bf3856ad364e35"
+      language="neutral"
+      versionScope="nonSxS"
+      xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+      <fDenyTSConnections>false</fDenyTSConnections>
+    </component>
+
+    <!-- RDP firewall rule (port 3389).
+         Active value is replaced by reinstall.sh:
+           true  = default port 3389 (firewall rule active)
+           false = custom RDP port (firewall rule disabled here; set later by windows-set-netconf.bat)
+         Reference for group name constant:
+           HKLM\System\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules
+           Get-NetFirewallRule | Where-Object Name -like 'RemoteDesktop*' | fl Name,DisplayName,Group -->
+    <component
+      name="Networking-MPSSVC-Svc"
+      processorArchitecture="%arch%"
+      publicKeyToken="31bf3856ad364e35"
+      language="neutral"
+      versionScope="nonSxS"
+      xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+      <FirewallGroups>
+        <FirewallGroup wcm:action="add" wcm:keyValue="RemoteDesktop">
+          <Profile>all</Profile>
+          <Group>@FirewallAPI.dll,-28752</Group>
+          <Active>%use_default_rdp_port%</Active>
+        </FirewallGroup>
+      </FirewallGroups>
+    </component>
+
+    <!-- Set High Performance power plan via GUID as well (belt-and-suspenders) -->
+    <component
+      name="Microsoft-Windows-powercpl"
+      processorArchitecture="%arch%"
+      publicKeyToken="31bf3856ad364e35"
+      language="neutral"
+      versionScope="nonSxS"
+      xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+      <!-- GUID for High Performance plan -->
+      <PreferredPlan>8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c</PreferredPlan>
+    </component>
+
+    <!-- Disable Windows Error Reporting -->
+    <component
+      name="Microsoft-Windows-ErrorReportingCore"
+      processorArchitecture="%arch%"
+      publicKeyToken="31bf3856ad364e35"
+      language="neutral"
+      versionScope="nonSxS"
+      xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+      <DisableWER>1</DisableWER>
+    </component>
+
+    <!-- Disable Customer Experience Improvement Program (telemetry) -->
+    <component
+      name="Microsoft-Windows-SQMApi"
+      processorArchitecture="%arch%"
+      publicKeyToken="31bf3856ad364e35"
+      language="neutral"
+      versionScope="nonSxS"
+      xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+      <CEIPEnabled>0</CEIPEnabled>
+    </component>
+
+  </settings>
+
+  <!-- =========================================================
+       PASS: oobeSystem
+       Runs during first-boot Out-Of-Box Experience.
+       Handles: user accounts, passwords, OOBE skip, timezone.
+       ========================================================= -->
+  <settings pass="oobeSystem">
+
+    <component
+      name="Microsoft-Windows-Shell-Setup"
+      processorArchitecture="%arch%"
+      publicKeyToken="31bf3856ad364e35"
+      language="neutral"
+      versionScope="nonSxS"
+      xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+      <UserAccounts>
+
+        <!-- Built-in Administrator password.
+             PlainText=false means the value must be Base64-encoded.
+             reinstall.sh encodes the password before injecting it. -->
+        <AdministratorPassword>
+          <Value>%administrator_password%</Value>
+          <PlainText>false</PlainText>
+        </AdministratorPassword>
+
+        <!-- Primary local user account created during installation -->
+        <LocalAccounts>
+          <LocalAccount wcm:action="add">
+            <Name>%user_username%</Name>
+            <Password>
+              <Value>%user_password%</Value>
+              <PlainText>false</PlainText>
+            </Password>
+            <!-- "Administrators" must always be in English regardless of ISO language.
+                 Reference:
+                   https://learn.microsoft.com/windows-hardware/customize/desktop/unattend/microsoft-windows-shell-setup-useraccounts-localaccounts-localaccount-group -->
+            <Group>Administrators</Group>
+          </LocalAccount>
+        </LocalAccounts>
+
+      </UserAccounts>
+
+      <OOBE>
+        <!-- Skip the End User License Agreement screen -->
+        <HideEULAPage>true</HideEULAPage>
+
+        <!-- Skip machine and user OOBE setup screens.
+             Microsoft docs say to avoid SkipMachineOOBE, but
+             Azure's own marketplace images use it — we follow that precedent.
+             Reference:
+               https://learn.microsoft.com/windows-hardware/customize/desktop/automate-oobe -->
+        <SkipMachineOOBE>true</SkipMachineOOBE>
+        <SkipUserOOBE>true</SkipUserOOBE>
+      </OOBE>
+
+      <!-- Timezone is intentionally left unset.
+           The installed system will use the default timezone from the ISO.
+           Uncomment and set as needed:
+      <TimeZone>UTC</TimeZone>
+      <TimeZone>Eastern Standard Time</TimeZone>
+      <TimeZone>Central Standard Time</TimeZone>
+      <TimeZone>Mountain Standard Time</TimeZone>
+      <TimeZone>Pacific Standard Time</TimeZone>
+      <TimeZone>GMT Standard Time</TimeZone>
+      <TimeZone>Romance Standard Time</TimeZone>
+      -->
+
+    </component>
+
+  </settings>
+
+</unattend>
