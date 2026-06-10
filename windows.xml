@@ -1,79 +1,250 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    HorusInstall - autounattend.xml
+    Placed at the root of the Windows partition as autounattend.xml.
+
+    Setup passes:
+      1. windowsPE  - locale, EULA, driver search paths
+      2. specialize - computer name, timezone, VirtIO pnputil, RDP enable
+      3. oobeSystem - admin account, autologon, first-logon script, OOBE skip
+-->
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
-    <settings pass="windowsPE">
-        <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-            <SetupUILanguage><UILanguage>en-US</UILanguage></SetupUILanguage>
-            <InputLocale>en-US</InputLocale>
-            <SystemLocale>en-US</SystemLocale>
-            <UILanguage>en-US</UILanguage>
-            <UILanguageFallback>en-US</UILanguageFallback>
-            <UserLocale>en-US</UserLocale>
-        </component>
-        <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-            <UserData>
-                <AcceptEula>true</AcceptEula>
-                <FullName>HorusInstall User</FullName>
-                <Organization>HorusInstall</Organization>
-            </UserData>
-        </component>
-        <component name="Microsoft-Windows-PnpCustomizationsWinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-            <DriverPaths>
-                <PathAndCredentials wcm:action="add" wcm:keyValue="1">
-                    <Path>C:\Drivers\VirtIO</Path>
-                </PathAndCredentials>
-                <PathAndCredentials wcm:action="add" wcm:keyValue="2">
-                    <Path>C:\Windows\INF\VirtIO</Path>
-                </PathAndCredentials>
-            </DriverPaths>
-        </component>
-    </settings>
-    
-    <settings pass="specialize">
-        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-            <ComputerName>*</ComputerName>
-            <TimeZone>UTC</TimeZone>
-            <DoNotCleanUpNonPresentDevices>true</DoNotCleanUpNonPresentDevices>
-        </component>
-        <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-            <RunSynchronous>
-                <RunSynchronousCommand wcm:action="add">
-                    <Order>1</Order>
-                    <CommandLine>cmd /c pnputil /add-driver C:\Drivers\VirtIO\*.inf /subdirs /install</CommandLine>
-                    <Description>Force install VirtIO kernels</Description>
-                </RunSynchronousCommand>
-            </RunSynchronous>
-        </component>
-        <component name="Microsoft-Windows-TerminalServices-LocalSessionManager" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-            <fDenyTSConnections>false</fDenyTSConnections>
-        </component>
-    </settings>
-    
-    <settings pass="oobeSystem">
-        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-            <UserAccounts>
-                <AdministratorPassword><Value>__WIN_PASSWORD__</Value><PlainText>true</PlainText></AdministratorPassword>
-            </UserAccounts>
-            <AutoLogon>
-                <Password><Value>__WIN_PASSWORD__</Value><PlainText>true</PlainText></Password>
-                <Enabled>true</Enabled>
-                <LogonCount>1</LogonCount>
-                <Username>__WIN_USERNAME__</Username>
-            </AutoLogon>
-            <FirstLogonCommands>
-                <SynchronousCommand wcm:action="add">
-                    <CommandLine>cmd /c "C:\Windows\Setup\Scripts\windows-setup.bat"</CommandLine>
-                    <Description>HorusInstall post-setup</Description>
-                    <Order>1</Order>
-                    <RequiresUserInput>false</RequiresUserInput>
-                </SynchronousCommand>
-            </FirstLogonCommands>
-        </component>
-        <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-            <InputLocale>en-US</InputLocale>
-            <SystemLocale>en-US</SystemLocale>
-            <UILanguage>en-US</UILanguage>
-            <UILanguageFallback>en-US</UILanguageFallback>
-            <UserLocale>en-US</UserLocale>
-        </component>
-    </settings>
+
+  <!-- =======================================================================
+       PASS 1 — windowsPE
+       Runs inside Windows PE before the OS is installed.
+  ======================================================================= -->
+  <settings pass="windowsPE">
+
+    <component name="Microsoft-Windows-International-Core-WinPE"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <SetupUILanguage>
+        <UILanguage>en-US</UILanguage>
+      </SetupUILanguage>
+      <InputLocale>en-US</InputLocale>
+      <SystemLocale>en-US</SystemLocale>
+      <UILanguage>en-US</UILanguage>
+      <UILanguageFallback>en-US</UILanguageFallback>
+      <UserLocale>en-US</UserLocale>
+    </component>
+
+    <component name="Microsoft-Windows-Setup"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <UserData>
+        <AcceptEula>true</AcceptEula>
+        <FullName>HorusInstall</FullName>
+        <Organization>HorusInstall</Organization>
+      </UserData>
+      <!-- Skip the "Where do you want to install Windows?" disk selection screen -->
+      <EnableFirewall>false</EnableFirewall>
+    </component>
+
+    <!--
+        VirtIO driver search paths.
+        Windows PE will scan these folders for .inf files during hardware
+        detection so storage/network drivers are available before disk access.
+        Both paths are populated by trans.sh before the image is applied.
+    -->
+    <component name="Microsoft-Windows-PnpCustomizationsWinPE"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <DriverPaths>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="1">
+          <Path>C:\Drivers\VirtIO</Path>
+        </PathAndCredentials>
+        <PathAndCredentials wcm:action="add" wcm:keyValue="2">
+          <Path>C:\Windows\INF\VirtIO</Path>
+        </PathAndCredentials>
+      </DriverPaths>
+    </component>
+
+  </settings>
+
+  <!-- =======================================================================
+       PASS 2 — specialize
+       Runs after the image is applied, before OOBE.
+  ======================================================================= -->
+  <settings pass="specialize">
+
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <!--
+          * = Windows generates a unique name automatically (max 15 chars).
+          Replace with a fixed string if a predictable hostname is needed.
+      -->
+      <ComputerName>*</ComputerName>
+      <TimeZone>UTC</TimeZone>
+      <DoNotCleanUpNonPresentDevices>true</DoNotCleanUpNonPresentDevices>
+      <!-- Register Windows as a server product — disables consumer features -->
+      <RegisteredOwner>HorusInstall</RegisteredOwner>
+      <RegisteredOrganization>HorusInstall</RegisteredOrganization>
+    </component>
+
+    <!--
+        Force-install all VirtIO .inf files during the specialize pass.
+        Ensures storage and network drivers are active before OOBE so the
+        machine does not stall on "Getting devices ready".
+        WillReboot=Never prevents an unexpected restart mid-pass.
+    -->
+    <component name="Microsoft-Windows-Deployment"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <RunSynchronous>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <CommandLine>cmd /c pnputil /add-driver C:\Drivers\VirtIO\*.inf /subdirs /install</CommandLine>
+          <Description>Force install VirtIO drivers</Description>
+          <WillReboot>Never</WillReboot>
+        </RunSynchronousCommand>
+        <!-- Disable Windows Firewall during setup to prevent blocking Setup network access -->
+        <RunSynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <CommandLine>cmd /c netsh advfirewall set allprofiles state off</CommandLine>
+          <Description>Temporarily disable firewall during setup</Description>
+          <WillReboot>Never</WillReboot>
+        </RunSynchronousCommand>
+      </RunSynchronous>
+    </component>
+
+    <!-- Enable RDP at specialize pass so it is ready on first boot -->
+    <component name="Microsoft-Windows-TerminalServices-LocalSessionManager"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <fDenyTSConnections>false</fDenyTSConnections>
+    </component>
+
+    <!-- Disable IE Enhanced Security Configuration (blocks scripted downloads) -->
+    <component name="Microsoft-Windows-IE-ESC"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <IEHardenAdmin>false</IEHardenAdmin>
+      <IEHardenUser>false</IEHardenUser>
+    </component>
+
+  </settings>
+
+  <!-- =======================================================================
+       PASS 3 — oobeSystem
+       Runs during Out-of-Box Experience.
+  ======================================================================= -->
+  <settings pass="oobeSystem">
+
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+      <UserAccounts>
+        <AdministratorPassword>
+          <Value>__WIN_PASSWORD__</Value>
+          <PlainText>true</PlainText>
+        </AdministratorPassword>
+        <LocalAccounts>
+          <LocalAccount wcm:action="add">
+            <Name>__WIN_USERNAME__</Name>
+            <Password>
+              <Value>__WIN_PASSWORD__</Value>
+              <PlainText>true</PlainText>
+            </Password>
+            <Group>Administrators</Group>
+            <DisplayName>__WIN_USERNAME__</DisplayName>
+          </LocalAccount>
+        </LocalAccounts>
+      </UserAccounts>
+
+      <!--
+          AutoLogon: one automatic login so SetupComplete.cmd and
+          FirstLogonCommands run unattended.
+          Disabled by windows-setup.bat after first run.
+      -->
+      <AutoLogon>
+        <Password>
+          <Value>__WIN_PASSWORD__</Value>
+          <PlainText>true</PlainText>
+        </Password>
+        <Enabled>true</Enabled>
+        <LogonCount>1</LogonCount>
+        <Username>__WIN_USERNAME__</Username>
+      </AutoLogon>
+
+      <!--
+          FirstLogonCommands: user-level commands on first interactive logon.
+          Path MUST match where trans.sh placed the script:
+          C:\Windows\Setup\Scripts\windows-setup.bat
+      -->
+      <FirstLogonCommands>
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <CommandLine>cmd /c "C:\Windows\Setup\Scripts\windows-setup.bat"</CommandLine>
+          <Description>HorusInstall post-setup configuration</Description>
+          <RequiresUserInput>false</RequiresUserInput>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+
+      <!-- Skip every OOBE interactive screen -->
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideLocalAccountScreen>true</HideLocalAccountScreen>
+        <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+        <!-- ProtectYourPC=3: do not set up automatic updates or send data -->
+        <ProtectYourPC>3</ProtectYourPC>
+        <NetworkLocation>Work</NetworkLocation>
+        <SkipMachineOOBE>true</SkipMachineOOBE>
+        <SkipUserOOBE>true</SkipUserOOBE>
+      </OOBE>
+
+    </component>
+
+    <component name="Microsoft-Windows-International-Core"
+               processorArchitecture="amd64"
+               publicKeyToken="31bf3856ad364e35"
+               language="neutral"
+               versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+      <InputLocale>en-US</InputLocale>
+      <SystemLocale>en-US</SystemLocale>
+      <UILanguage>en-US</UILanguage>
+      <UILanguageFallback>en-US</UILanguageFallback>
+      <UserLocale>en-US</UserLocale>
+    </component>
+
+  </settings>
+
 </unattend>
