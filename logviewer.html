@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HorusInstall - Live Log</title>
+<style>
+  body { margin:0; background:#0d1117; color:#c9d1d9; font:13px/1.5 Consolas,Monaco,monospace; }
+  header { padding:10px 14px; background:#161b22; border-bottom:1px solid #30363d;
+           font-weight:bold; color:#58a6ff; }
+  #log { padding:12px 14px; white-space:pre-wrap; word-break:break-all; }
+  .err { color:#ff7b72; } .warn { color:#d29922; } .ok { color:#7ee787; }
+</style>
+</head>
+<body>
+<header>HorusInstall &mdash; live installer log (trans.sh)</header>
+<div id="log">Connecting...</div>
+<script>
+(function () {
+  var log = document.getElementById('log');
+  var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  var ws = new WebSocket(protocol + '//' + location.host + '/');
+  var first = true;
+  ws.onopen = function () { if (first) { log.textContent = ''; first = false; } };
+  ws.onmessage = function (e) {
+    if (first) { log.textContent = ''; first = false; }
+    var line = e.data.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    if (/ERROR|error/i.test(line))                   line = '<span class="err">' + line + '</span>';
+    else if (/warning/i.test(line))                 line = '<span class="warn">' + line + '</span>';
+    else if (/\*\*\*\*\*/.test(line))                line = '<span class="ok">' + line + '</span>';
+    log.innerHTML += line + '\n';
+    window.scrollTo(0, document.body.scrollHeight);
+  };
+  ws.onclose = function () {
+    log.innerHTML += '\n<span class="warn">[connection closed - installer may have rebooted]</span>\n';
+  };
+  ws.onerror = function () {
+    log.innerHTML += '\n<span class="err">[websocket error]</span>\n';
+  };
+})();
+</script>
+</body>
+</html>

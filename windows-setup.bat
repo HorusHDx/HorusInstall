@@ -140,43 +140,17 @@ if "%is4kn%"=="1" (
 )
 
 rem ============================================================================
-rem Partition and format the target disk.
+rem DO NOT repartition here.
 rem
-rem EFI layout (GPT):
-rem   Part 1 : EFI System Partition  (FAT32, 100 or 260 MB)
-rem   Part 2 : Microsoft Reserved    (16 MB)
-rem   Part 3 : Windows OS partition  (NTFS, remainder)
+rem trans.sh already prepared the disk in Alpine:
+rem   GPT  : 1=EFI  2=MSR  3=installer (Y:, holds install.wim)  4=Windows
+rem   MBR  : 1=installer (Y:)  2=Windows
 rem
-rem BIOS layout (MBR):
-rem   Part 1 : Windows OS partition  (NTFS, entire disk)
-rem            Marked active for bootability
-rem
-rem We delete existing parts 1-3 on GPT before recreating them.
-rem On MBR we only reformat part 1 (the OS partition already exists).
+rem The old version deleted/recreated parts 1-3 from WinPE, which erased Y:
+rem (the ISO source) and left Windows on part 3 while windows.xml points to 4.
+rem Windows setup formats the target partition itself, so nothing to do.
+rem %is4kn% is kept only for the EFI size comment/compatibility.
 rem ============================================================================
-(if "%BootType%"=="efi" (
-    echo select disk %DiskIndex%
-    echo select part 1
-    echo delete part override
-    echo select part 2
-    echo delete part override
-    echo select part 3
-    echo delete part override
-    echo create part efi size=%EFISize%
-    echo format fs=fat32 quick
-    echo create part msr size=16
-    echo create part primary
-    echo format fs=ntfs quick
-) else (
-    echo select disk %DiskIndex%
-    echo select part 1
-    echo format fs=ntfs quick
-    echo active
-)) > X:\diskpart.txt
-
-rem Run diskpart from script file — errors stop execution cleanly
-diskpart /s X:\diskpart.txt
-del X:\diskpart.txt
 
 rem ============================================================================
 rem For new setup.exe (build >= 26040, i.e. 24H2+) on BIOS machines:
